@@ -195,10 +195,14 @@ Dispatcher.Execute(Enum::"Cloud Event Message Type ori"::"Your.Type.Name",
     RequestContent, ResponseContent, ResponseContentType);
 ```
 
-`Execute` bypasses the queue table entirely (fastest, nothing persisted) —incompatible with
-`TryFunction`-isolated message types. `EnqueueAndProcess` runs the full orchestrator
-(auditable, supports webhook completion). Both take an `OmitCommit` parameter for chaining
-calls that must roll back together. Full contract: `CALLING-FROM-AL.md`.
+`Execute` bypasses the queue table entirely (fastest, nothing persisted). The single-argument
+overload always runs with `OmitCommit=true`, and **it is `OmitCommit=true` — not `Execute` itself —
+that is incompatible with `TryFunction`-isolated message types** (Core's own dispatcher XML docs say
+so explicitly, `CloudEventsDispatcher.Codeunit.al`). Call the eight-argument `Execute` overload with
+`OmitCommit=false` if you need queue-free dispatch of a `TryFunction`-isolated type.
+`EnqueueAndProcess` runs the full orchestrator (auditable, supports webhook completion). Both take an
+`OmitCommit` parameter for chaining calls that must roll back together. Full contract:
+`CALLING-FROM-AL.md`.
 
 ---
 

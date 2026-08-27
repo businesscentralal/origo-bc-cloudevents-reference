@@ -53,7 +53,10 @@ configured on this repo - see `.AL-Go/settings.json`.
 
 ## Extension model
 
-- `interface "Cloud Event Msg Interface ori"` — implement this; six methods, no `Access = Internal`.
+- `interface "Cloud Event Msg Interface ori"` — implement this; six methods, the *interface itself*
+  carries no `Access = Internal` (an interface's own methods are the public contract). Implementing
+  codeunits commonly are `Access = Internal` — see `RefNoteAddImpl.Codeunit.al` — since the interface,
+  not the codeunit directly, is how a message type is invoked.
 - `enum "Cloud Event Message Type ori"` — `Extensible = true`; add your value via an enum extension.
 - `table "CE Message Argument ori"` — the request/response carrier every implementation reads from and writes to.
 - `codeunit "Cloud Events Dispatcher ori"` — the public, in-process entry point; see `CALLING-FROM-AL.md`.

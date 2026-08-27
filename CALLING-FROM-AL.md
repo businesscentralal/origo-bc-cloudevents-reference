@@ -59,6 +59,19 @@ end;
 No API page, no OAuth, no network call - this runs entirely in-process, in the caller's own
 transaction (unless `OmitCommit` is used to isolate it).
 
+## Which license pool this consumes
+
+Calling either procedure still consumes a license pool - it's just not the pool you might
+assume. Core resolves the pool with `ResolvePool()` (`CloudEventLicense.Codeunit.al`): if the
+current session is a Microsoft Entra application (service principal), it charges the **App
+Registration** pool; otherwise it charges the **User** pool. A normal interactive BC session -
+which is what's running when a button click in a page triggers this call - is not an AAD
+application, so it resolves to `User` every time. In other words: calling a message type from
+AL inside BC meters against the same **User** pool as an interactive person using the UI, not
+against the App Registration pool that external, service-principal-authenticated callers use.
+If you were expecting your in-process calls to be "free" or counted separately, they aren't -
+plan license capacity accordingly.
+
 ## Why this matters for both guides in this repo
 
 - If you're **extending** (`EXTENDING.md`): your message type is callable this way for free,
