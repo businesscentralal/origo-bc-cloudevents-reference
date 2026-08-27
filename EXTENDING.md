@@ -37,6 +37,9 @@ app (see this repo's `app.json`).
 Object IDs in this repo (`90000–90049`) are illustrative only. Register your own range
 before building anything real — see this repo's `README.md`.
 
+**Read `WRITING-HELP.md` before writing your help text.** For most message types it is not
+documentation on the side - it's the only schema an agent calling your type will ever see.
+
 ## 3. Every implementation must call two guards, always
 
 ```al

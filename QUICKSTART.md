@@ -49,10 +49,15 @@ curl -X POST "https://<env>/api/origo/cloudEvent/v1.0/tasks" \
     "specversion": "1.0",
     "type": "Reference.Echo.Set",
     "source": "quickstart",
+    "subject": "quickstart-1",
     "datacontenttype": "application/json",
     "data": "{\"message\":\"hello\"}"
   }'
 ```
+
+`subject` is required here - `tasks` declares it `NotBlank`, unlike `queues` where it's
+optional (see `INTEGRATING.md`'s "Required fields differ per endpoint" table). Leaving it out
+is the first thing that goes wrong if you copy this without reading that table.
 
 The response's `data` field is a **link**, not the payload - GET it from `CE Response Data
 API` (`/api/origo/cloudEvent/v1.0/responses`) to read the actual result. This two-call shape

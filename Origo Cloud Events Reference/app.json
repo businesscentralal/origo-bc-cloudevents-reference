@@ -26,9 +26,9 @@
     }
   ],
   "resourceExposurePolicy": {
-    "allowDebugging": false,
-    "allowDownloadingSource": false,
-    "includeSourceInSymbolFile": false
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
   },
   "supportedLocales": [
     "en-US"

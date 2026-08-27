@@ -6,15 +6,24 @@ using Origo.APP.CloudEvents;
 /// Reference implementation of a WRITE message type. Demonstrates the mandatory isolation
 /// pattern: the actual write happens in a separate codeunit (TableNo = "CE Message Argument
 /// ori") invoked via Codeunit.Run(), so a failure is caught here and reported through
-/// RespondWithLastError() without rolling back the outer transaction.
+/// RespondWithLastError() without rolling back the outer transaction. Help text lives in a
+/// separate codeunit (RefNoteAddHelp) - the pattern Core uses for every one of its 143
+/// message types once help text grows past a few lines; see WRITING-HELP.md.
 /// </summary>
 codeunit 90003 "Ref Note Add Impl" implements "Cloud Event Msg Interface ori"
 {
     Access = Internal;
 
+    /// <summary>
+    /// A real gate, not a formality: returning false here means this message type is not
+    /// listed and cannot be chosen at all - matching how Core's own IsEnabled implementations
+    /// check WritePermission() or a setup flag, rather than unconditionally returning true.
+    /// </summary>
     internal procedure IsEnabled(): Boolean
+    var
+        RefNote: Record "Ref Note";
     begin
-        exit(true);
+        exit(RefNote.WritePermission());
     end;
 
     internal procedure GetFilterTableNo(): Integer
@@ -34,15 +43,9 @@ codeunit 90003 "Ref Note Add Impl" implements "Cloud Event Msg Interface ori"
 
     internal procedure GetMessageHelpAsMarkdownDocument(var Argument: Record "CE Message Argument ori")
     var
-        HelpText: TextBuilder;
+        RefNoteAddHelp: Codeunit "Ref Note Add Help";
     begin
-        HelpText.AppendLine('# Reference.Note.Add');
-        HelpText.AppendLine(GetDescription());
-        HelpText.AppendLine('');
-        HelpText.AppendLine('**Request:** `{ "no": "NOTE-1", "text": "hello" }`');
-        HelpText.AppendLine('**Response (success):** `{ "no": "NOTE-1" }`');
-        HelpText.AppendLine('**Response (failure, e.g. duplicate no.):** structured error via `RespondWithLastError`, caught from the isolated write codeunit rather than pre-checked here.');
-        Argument.SetResponseMarkdown(HelpText.ToText());
+        Argument.SetResponseMarkdown(RefNoteAddHelp.GetHelpText());
     end;
 
     internal procedure ExecuteCloudEventTask(var Argument: Record "CE Message Argument ori")

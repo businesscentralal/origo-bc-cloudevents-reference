@@ -45,6 +45,18 @@ Naming convention for the enum value (the wire `type` string): `Domain.Noun.Verb
 `Reference.Table.Get`, `Sales.Document.Post`. `Locked = true` on the caption - it must never
 be translated, callers in every locale send the same string.
 
+**`IsEnabled` must be a real gate, not `exit(true)`.** Returning `false` means the type is
+not listed and cannot be chosen at all - a real access-control mechanism (e.g. gate on
+`WritePermission()` for a write, or a setup flag), not a formality.
+
+**Help text is the contract, not a nicety - read `WRITING-HELP.md` before writing it.** Most
+message types exposed as agent tools get a generic, parameter-less schema; the help markdown
+is the only place your actual request/response shape and failure modes are described
+anywhere. Use the skeleton in `WRITING-HELP.md` (Overview, Request Parameters, Response
+Shape, Errors, Idempotency/Safety, Related Message Types, Examples) - keep it inline in the
+impl codeunit only while it's a few lines; move it to its own codeunit once it grows past
+that, matching `RefNoteAddHelp.Codeunit.al`.
+
 ### 1.2 Every `ExecuteCloudEventTask` starts with both guards, in this order
 
 ```al
