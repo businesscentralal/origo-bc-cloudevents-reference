@@ -1,0 +1,201 @@
+# AGENTS.md — context for a coding agent adding Cloud Events support
+
+This file is written to be pasted into a coding agent's context before it writes any AL
+code against Origo Cloud Events. It is deliberately dense and structured, not narrative -
+the human-readable versions of everything here are `QUICKSTART.md`, `EXTENDING.md`,
+`ADAPTING.md`, `INTEGRATING.md`, and `CALLING-FROM-AL.md`, in that reading order. This file
+exists so you don't have to read all five before writing the first line of code.
+
+## Step 0: which situation are you in?
+
+| Situation | Go to |
+|---|---|
+| No existing procedure does this yet - writing new logic | §1 Build from scratch |
+| An existing procedure already does this - you're wrapping it | §2 Retrofit |
+
+Do not skip this decision. The two situations produce different code, and treating a
+retrofit as if it were greenfield is the most common mistake (see §2.3).
+
+---
+
+## §1. Build from scratch
+
+### 1.1 The mandatory contract
+
+Every message type is exactly these three pieces. No fewer, no substitutes.
+
+| Piece | Requirement |
+|---|---|
+| A codeunit implementing `Cloud Event Msg Interface ori` | All six methods below, all mandatory |
+| An enum extension on `Cloud Event Message Type ori` | One `value()` per message type, `Caption = '...', Locked = true` |
+| `GetMessageHelpAsMarkdownDocument` inside that codeunit | Not optional - this is how the type gets discovered/used later |
+
+Six interface methods, all required:
+
+```al
+procedure IsEnabled(): Boolean
+procedure GetFilterTableNo(): Integer
+procedure GetDescription(): Text[250]
+procedure GetMessageDirection(): Enum "Cloud Event Msg Direction ori"
+procedure GetMessageHelpAsMarkdownDocument(var Argument: Record "CE Message Argument ori")
+procedure ExecuteCloudEventTask(var Argument: Record "CE Message Argument ori")
+```
+
+Naming convention for the enum value (the wire `type` string): `Domain.Noun.Verb`, e.g.
+`Reference.Table.Get`, `Sales.Document.Post`. `Locked = true` on the caption - it must never
+be translated, callers in every locale send the same string.
+
+### 1.2 Every `ExecuteCloudEventTask` starts with both guards, in this order
+
+```al
+Argument.AssertVersion1();
+Argument.AssertIsLicensed();
+```
+
+`AssertVersion1` is a real check. `AssertIsLicensed` cannot fail on the path your code runs
+on (licensing is enforced one layer up, before your implementation is ever called) - call it
+anyway, it costs nothing and future-proofs other entry points.
+
+### 1.3 Error handling — two shapes, pick correctly
+
+| Failure kind | Mechanism | Example |
+|---|---|---|
+| Expected (bad input, not found, business rule) | `Argument.RespondWithError(msg)` | missing field, record not found |
+| Unexpected (anything that could still throw) | Isolate in a sub-codeunit, catch via `Codeunit.Run()`, then `Argument.RespondWithLastError()` | see §1.4 |
+
+Both produce `{ status: "Error", error, hint }`. **A response with no `status` field at all
+counts as success** - do not add a `status: "Success"` field, its absence is the contract.
+
+Never let a message type have *only* the success path. One that can never fail is
+incomplete, not simple.
+
+### 1.4 Writes must be isolated
+
+```al
+// Main impl codeunit:
+if not Codeunit.Run(Codeunit::"Your Write Process", Argument) then
+    Argument.RespondWithLastError();
+```
+
+```al
+// Your Write Process — TableNo = "CE Message Argument ori", this exact TableNo required
+trigger OnRun()
+begin
+    // Error() here is caught by the caller's Codeunit.Run() and reported through
+    // RespondWithLastError() — the outer transaction is not rolled back on failure
+    // unless you structure it this way.
+end;
+```
+
+Skipping this means a failed write can leave state the caller never asked you to touch.
+
+### 1.5 Object IDs
+
+Register your own range before writing anything real. Never reuse `90000-90049` (this
+repo's illustrative range) or Origo's real range (`10075485-10075984`) - both are meaningless
+outside their own repos.
+
+### 1.6 Worked examples in this repo
+
+| File | Demonstrates |
+|---|---|
+| `Origo Cloud Events Reference/src/MessageTypes/RefEchoSetImpl.Codeunit.al` | Minimum viable type, no failure path |
+| `Origo Cloud Events Reference/src/MessageTypes/RefTableGetImpl.Codeunit.al` | Read + `RespondWithError` |
+| `Origo Cloud Events Reference/src/MessageTypes/RefNoteAddImpl.Codeunit.al` + `RefNoteAddProcess.Codeunit.al` | Write + isolation + `RespondWithLastError` |
+
+---
+
+## §2. Retrofit an existing solution
+
+### 2.1 The one fact that changes everything
+
+An `interface` can only be implemented by a `codeunit`, never a page. If the logic you're
+wrapping already lives in a codeunit procedure, you write a **new** codeunit that calls it -
+the original procedure and its callers (pages, other code) do not change. If the logic lives
+inline in a page trigger, it has to move to a codeunit procedure first - not a Cloud Events
+requirement specifically, just a precondition of AL's interface model.
+
+### 2.2 Before wrapping anything, check the existing procedure for these two signals
+
+| Signal in the existing procedure | What it means |
+|---|---|
+| `Confirm()`, `Message()`, or any page/dialog call | **Cannot wrap directly.** No automated caller can answer a dialog. Extract a silent variant first (see 2.3). |
+| `Commit()` anywhere before the procedure returns | **Cannot wrap directly.** A mid-procedure commit breaks the isolated-failure contract every message type relies on - a later failure can't roll back what already committed. Extract a silent variant first. |
+| Neither present, one transaction, plain read/write | Safe to wrap directly - call it from `ExecuteCloudEventTask` as-is. |
+
+If you find either signal and wrap the procedure anyway without extracting a silent variant,
+you have built something that will misbehave under real automated/retry traffic. This is not
+a style preference.
+
+### 2.3 The extraction pattern, when signals are present
+
+- Add a new procedure with no `Confirm()`/`Message()` and no interim `Commit()` — same writes,
+  one transaction, e.g. `CancelReservationSilent` next to the original `CancelReservation`.
+- Keep the original procedure as-is for existing callers — it becomes a thin wrapper around
+  the new silent procedure (confirm dialog, then call the silent version).
+- Your Cloud Events impl codeunit calls the silent procedure, never the original.
+
+Worked example: `Legacy App/src/LegacyStockMgt.Codeunit.al` — `ReserveStock` needed no
+change (2.2's "safe" case); `CancelReservation`/`CancelReservationSilent` is the extraction
+(2.2's "cannot wrap directly" case). `git log` on that file shows the two states as separate
+commits — read the diff, not just the current file.
+
+### 2.4 Idempotency — check this before shipping any retrofitted write
+
+Cloud Events tasks can be retried. If the operation you're wrapping isn't safe to run twice
+(decrements a quantity, submits a payment, creates a duplicate record on a second call),
+either make it safe (check-before-act on a natural key) or make this an explicit, documented
+limitation. This matters most for financial/regulatory operations - check before you assume.
+
+### 2.5 One app or two?
+
+| You... | Structure |
+|---|---|
+| Don't own/can't modify the original app, or want independent release cycles | Two apps: the original untouched, a new app depending on it that adds the message types. Worked example: `Legacy App` + `Legacy App - Cloud Events` in this repo. |
+| Own the original app outright | One app: add `src/MessageTypes/<Domain>/` inside the existing app - one codeunit per type, one shared enum extension, no new app. This is what Origo's own shipped extensions (Arionbanki, DocEx) actually do. |
+
+Everything else in this file applies identically either way - this choice is only about
+where the code lives.
+
+### 2.6 Object IDs for a retrofit
+
+Use the existing solution's own registered range. Do not register a fresh range for the
+adapter - that's a from-scratch-only step (§1.5).
+
+---
+
+## §3. Calling it (either situation)
+
+### 3.1 From outside Business Central
+
+Four OData pages under `/api/origo/cloudEvent/v1.0/`: `queues` (enqueue only), `tasks`
+(enqueue + process, synchronous), `requests`/`responses` (read-only). Neither POST returns
+your payload directly - both put a relative link in `data`; GET `responses` for the actual
+result. `data` is an escaped JSON **string**, not a nested object. Full contract:
+`INTEGRATING.md`.
+
+### 3.2 From AL code already inside Business Central — no HTTP, no external caller
+
+```al
+Dispatcher: Codeunit "Cloud Events Dispatcher ori";
+Dispatcher.Execute(Enum::"Cloud Event Message Type ori"::"Your.Type.Name",
+    Enum::"CE Message Version ori"::"1.0", '', '', 'application/json',
+    RequestContent, ResponseContent, ResponseContentType);
+```
+
+`Execute` bypasses the queue table entirely (fastest, nothing persisted) —incompatible with
+`TryFunction`-isolated message types. `EnqueueAndProcess` runs the full orchestrator
+(auditable, supports webhook completion). Both take an `OmitCommit` parameter for chaining
+calls that must roll back together. Full contract: `CALLING-FROM-AL.md`.
+
+---
+
+## §4. Done means
+
+- Compiles.
+- Registered in the enum, `GetMessageHelpAsMarkdownDocument` describes it accurately.
+- Both a success path and at least one failure path have been exercised and match the help
+  text.
+- If retrofitting: the existing procedure was checked against §2.2's table, not assumed safe.
+- If the operation writes and could be retried: idempotency was actually considered (§2.4),
+  not skipped.

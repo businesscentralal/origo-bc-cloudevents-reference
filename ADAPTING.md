@@ -18,6 +18,24 @@ don't own, can't touch, or don't want to touch the original extension's release 
 separate, additive extension means the original app's behaviour for its existing callers -
 pages, other codeunits, whatever already calls it - never changes.
 
+**This two-app split is not the only correct structure — check which one you're in first.**
+
+Verified against two real, shipped Origo extensions (Arionbanki: 30+ message types across
+Accounts, Bills, Claims, Payments, Statement; DocEx's full message-type set) - **neither
+uses a separate adapter app.** Both add a `src/MessageTypes/<Domain>/` folder *inside* the
+same app: one codeunit per message type, one shared enum extension, no new app at all. That
+works because Origo owns both the original solution and the Cloud Events layer, so there's
+no reason to keep them apart.
+
+| You... | Structure |
+|---|---|
+| **Don't own or can't modify** the original app (a real third party, a customer's own module, deliberately independent release cadence) | Two apps, as in this repo's worked example |
+| **Own the original app outright** (the common case for your own future work) | One app, new `src/MessageTypes/<Domain>/` folder, same pattern Arionbanki and DocEx already use |
+
+The underlying rules - six methods, two guards, error handling, write isolation, the
+Confirm()/Commit() check below - are identical either way. This choice is about *where the
+adapter code lives*, not about what it has to do.
+
 ## Case 1: `Legacy.Stock.Reserve` - a thin wrapper, nothing else needed
 
 `Legacy Stock Mgt.ReserveStock` has no dialogs and no intermediate `Commit()` - the whole

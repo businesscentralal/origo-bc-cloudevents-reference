@@ -10,7 +10,8 @@ the patterns.
 
 | Your situation | Read |
 |---|---|
-| **First time here** | [`QUICKSTART.md`](QUICKSTART.md) - clone, compile, call one message type, end to end |
+| **Giving this to a coding agent** | [`AGENTS.md`](AGENTS.md) - one dense file covering both build-from-scratch and retrofit, written for an agent to act on directly |
+| **First time here, reading it yourself** | [`QUICKSTART.md`](QUICKSTART.md) - clone, compile, call one message type, end to end |
 | **Building a new message type from scratch** | [`EXTENDING.md`](EXTENDING.md) |
 | **You already have an extension and want to add Cloud Events support** | [`ADAPTING.md`](ADAPTING.md) |
 | **Calling Cloud Events from outside Business Central** | [`INTEGRATING.md`](INTEGRATING.md) |
