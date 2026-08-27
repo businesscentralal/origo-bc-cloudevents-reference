@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/AL-Go-Actions/v9.0/.Modules/settings.schema.json",
   "country": "w1",
-  "appFolders": ["Origo Cloud Events Reference"],
+  "appFolders": ["Origo Cloud Events Reference", "Legacy App"],
   "testFolders": [],
   "bcptTestFolders": [],
   "appDependencyProbingPaths": [
