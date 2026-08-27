@@ -34,25 +34,35 @@ codeunit 90050 "Legacy Stock Mgt"
     end;
 
     /// <summary>
-    /// Cancels a reservation. Ordinary-looking BC code that is exactly what makes it
-    /// unsafe to call headlessly: it asks the user a question, and it commits the
-    /// deletion before the log write that follows - a failure in the log write does not
-    /// roll back the cancellation. Fine for an interactive user who can see both steps
-    /// happen; wrong for an automated caller. Do not wrap this procedure directly.
+    /// Cancels a reservation. The original, UI-facing entry point - unchanged in
+    /// behaviour for existing callers (pages, other codeunits already calling this).
+    /// Now just a confirm dialog in front of the silent core below. Kept instead of
+    /// deleted so this retrofit does not require touching every existing caller.
     /// </summary>
     procedure CancelReservation(ItemNo: Code[20])
     var
-        Reservation: Record "Legacy Stock Reservation";
-        Log: Record "Legacy Cancellation Log";
         ConfirmQst: Label 'Cancel the reservation for %1?', Comment = '%1 = item no.';
     begin
         if not Confirm(ConfirmQst, false, ItemNo) then
             exit;
+        CancelReservationSilent(ItemNo);
+    end;
 
+    /// <summary>
+    /// The retrofit: the same two writes as before (delete the reservation, log the
+    /// cancellation), but as one procedure with no Confirm() and no Commit() in between -
+    /// both writes now succeed or fail together. This is what "Legacy App - Cloud Events"
+    /// calls; CancelReservation above still exists for existing UI callers. See
+    /// ADAPTING.md for why this extraction was necessary rather than optional.
+    /// </summary>
+    procedure CancelReservationSilent(ItemNo: Code[20])
+    var
+        Reservation: Record "Legacy Stock Reservation";
+        Log: Record "Legacy Cancellation Log";
+    begin
         if not Reservation.Get(ItemNo) then
             exit;
         Reservation.Delete(true);
-        Commit(); // Legacy behaviour: the deletion is final before the log write below runs.
 
         Log.Init();
         Log."Item No." := ItemNo;
@@ -60,3 +70,4 @@ codeunit 90050 "Legacy Stock Mgt"
         Log.Insert(true);
     end;
 }
+
